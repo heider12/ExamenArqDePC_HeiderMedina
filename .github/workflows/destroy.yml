@@ -1,0 +1,104 @@
+name: Destroy EC2 Stack de CloudFormation
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: examen-arq-ec2-stack
+
+jobs:
+  destroy:
+    name: Eliminar Infraestructura de AWS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verificar que el stack existe
+        run: |
+          echo "Verificando existencia del stack: ${{ env.STACK_NAME }}"
+
+          STATUS=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query "Stacks[0].StackStatus" \
+            --output text 2>/dev/null || echo "NO_EXISTE")
+
+          echo "Estado actual del stack: $STATUS"
+
+          if [ "$STATUS" == "NO_EXISTE" ]; then
+            echo "El stack no existe. No hay nada que eliminar."
+            exit 0
+          fi
+
+          echo "STACK_STATUS=$STATUS" >> $GITHUB_ENV
+
+      - name: Obtener IP pública antes de eliminar
+        run: |
+          PUBLIC_IP=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query "Stacks[0].Outputs[?OutputKey=='PublicIP'].OutputValue" \
+            --output text 2>/dev/null || echo "N/A")
+
+          echo "IP que sera eliminada: $PUBLIC_IP"
+          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+
+      - name: Eliminar stack de CloudFormation
+        run: |
+          echo "Eliminando stack: ${{ env.STACK_NAME }}"
+
+          aws cloudformation delete-stack \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+          echo "Solicitud de eliminacion enviada. Esperando confirmacion..."
+
+      - name: Esperar a que el stack sea eliminado
+        run: |
+          echo "Esperando eliminacion completa del stack..."
+
+          aws cloudformation wait stack-delete-complete \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+          echo "Stack eliminado correctamente"
+
+      - name: Verificar eliminacion del stack
+        run: |
+          STATUS=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query "Stacks[0].StackStatus" \
+            --output text 2>/dev/null || echo "ELIMINADO")
+
+          echo "Estado final del stack: $STATUS"
+
+          if [ "$STATUS" == "ELIMINADO" ]; then
+            echo "Confirmado: el stack fue eliminado exitosamente"
+          else
+            echo "Advertencia: el stack aun aparece con estado $STATUS"
+            exit 1
+          fi
+
+      - name: Resumen de la eliminacion
+        run: |
+          echo "================================================"
+          echo "  ELIMINACION COMPLETADA EXITOSAMENTE"
+          echo "================================================"
+          echo "  Stack eliminado : ${{ env.STACK_NAME }}"
+          echo "  Region          : ${{ env.AWS_REGION }}"
+          echo "  IP eliminada    : ${{ env.PUBLIC_IP }}"
+          echo "  La EC2 fue terminada"
+          echo "  El Security Group fue eliminado"
+          echo "  La pagina web ya no es accesible"
+          echo "================================================"
