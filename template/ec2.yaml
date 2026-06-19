@@ -1,0 +1,314 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Template CloudFormation - Examen Final Arquitectura Orientada a Servicios.
+  Despliega una instancia EC2 Amazon Linux con un Security Group
+  y una pagina web servida por Apache mediante UserData.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+    Description: Tipo de instancia EC2
+
+  StudentName:
+    Type: String
+    Default: "Heider Medina"
+    Description: Nombre completo del estudiante
+
+  StudentCode:
+    Type: String
+    Default: "0192304"
+    Description: Codigo estudiantil
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0c02fb55956c7d316
+    us-east-2:
+      AMI: ami-0568773882d492fc8
+    us-west-1:
+      AMI: ami-0d9858aa3c6322f73
+    us-west-2:
+      AMI: ami-098e42ae54c764c35
+
+Resources:
+
+  # ─── Security Group ───────────────────────────────────────────────────────────
+  ExamenSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: examen-arq-sg
+      GroupDescription: Security Group del Examen Final - permite HTTP en puerto 80
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Acceso HTTP publico
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Acceso SSH (solo para laboratorio)
+      Tags:
+        - Key: Name
+          Value: examen-arq-sg
+        - Key: Proyecto
+          Value: ExamenFinal
+
+  # ─── Instancia EC2 ────────────────────────────────────────────────────────────
+  ExamenEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+      SecurityGroups:
+        - !Ref ExamenSecurityGroup
+      Tags:
+        - Key: Name
+          Value: examen-arq-ec2
+        - Key: Proyecto
+          Value: ExamenFinal
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y httpd
+
+          systemctl start httpd
+          systemctl enable httpd
+
+          cat > /var/www/html/index.html << 'HTML'
+          <!DOCTYPE html>
+          <html lang="es">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Examen Final - Arquitectura de Computadores</title>
+            <style>
+              * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+              }
+
+              body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #fff;
+              }
+
+              .card {
+                background: rgba(255, 255, 255, 0.08);
+                backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 20px;
+                padding: 50px 60px;
+                max-width: 680px;
+                width: 90%;
+                text-align: center;
+                box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+                animation: fadeIn 1s ease;
+              }
+
+              @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(30px); }
+                to   { opacity: 1; transform: translateY(0); }
+              }
+
+              .badge {
+                display: inline-block;
+                background: rgba(99, 179, 237, 0.2);
+                border: 1px solid rgba(99, 179, 237, 0.5);
+                color: #90cdf4;
+                font-size: 0.75rem;
+                letter-spacing: 2px;
+                text-transform: uppercase;
+                padding: 6px 18px;
+                border-radius: 50px;
+                margin-bottom: 28px;
+              }
+
+              .logo {
+                font-size: 3.5rem;
+                margin-bottom: 16px;
+              }
+
+              h1 {
+                font-size: 1.6rem;
+                font-weight: 700;
+                color: #e2e8f0;
+                line-height: 1.4;
+                margin-bottom: 32px;
+              }
+
+              h1 span {
+                color: #63b3ed;
+              }
+
+              .divider {
+                width: 60px;
+                height: 3px;
+                background: linear-gradient(90deg, #63b3ed, #9f7aea);
+                border-radius: 2px;
+                margin: 0 auto 32px;
+              }
+
+              .info-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 16px;
+                margin-bottom: 32px;
+              }
+
+              .info-box {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 12px;
+                padding: 20px 16px;
+              }
+
+              .info-box .label {
+                font-size: 0.7rem;
+                letter-spacing: 1.5px;
+                text-transform: uppercase;
+                color: #a0aec0;
+                margin-bottom: 8px;
+              }
+
+              .info-box .value {
+                font-size: 1rem;
+                font-weight: 600;
+                color: #e2e8f0;
+              }
+
+              .info-box.highlight {
+                grid-column: span 2;
+                border-color: rgba(99, 179, 237, 0.4);
+                background: rgba(99, 179, 237, 0.08);
+              }
+
+              .info-box.highlight .value {
+                color: #63b3ed;
+                font-size: 1.1rem;
+              }
+
+              .status {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                background: rgba(72, 187, 120, 0.12);
+                border: 1px solid rgba(72, 187, 120, 0.35);
+                border-radius: 12px;
+                padding: 14px 20px;
+                margin-bottom: 28px;
+                color: #9ae6b4;
+                font-size: 0.9rem;
+              }
+
+              .dot {
+                width: 10px;
+                height: 10px;
+                background: #48bb78;
+                border-radius: 50%;
+                animation: pulse 2s infinite;
+                flex-shrink: 0;
+              }
+
+              @keyframes pulse {
+                0%, 100% { box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.6); }
+                50%       { box-shadow: 0 0 0 8px rgba(72, 187, 120, 0); }
+              }
+
+              .footer {
+                font-size: 0.78rem;
+                color: #718096;
+                margin-top: 8px;
+              }
+
+              #clock {
+                font-size: 0.85rem;
+                color: #a0aec0;
+                margin-top: 10px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="badge">AWS EC2 &bull; CloudFormation &bull; GitHub Actions</div>
+              <div class="logo">&#9729;</div>
+              <h1>Examen Final <span>Arquitectura de Computadores</span></h1>
+              <div class="divider"></div>
+
+              <div class="info-grid">
+                <div class="info-box">
+                  <div class="label">Estudiante</div>
+                  <div class="value">${StudentName}</div>
+                </div>
+                <div class="info-box">
+                  <div class="label">Código estudiantil</div>
+                  <div class="value">${StudentCode}</div>
+                </div>
+                <div class="info-box highlight">
+                  <div class="label">Asignatura</div>
+                  <div class="value">Examen Final Arquitectura de Computadores</div>
+                </div>
+              </div>
+
+              <div class="status">
+                <div class="dot"></div>
+                Instancia EC2 desplegada y funcionando correctamente
+              </div>
+
+              <div class="footer">Arquitectura Orientada a Servicios &mdash; Ingeniería de Sistemas</div>
+              <div id="clock"></div>
+            </div>
+
+            <script>
+              function updateClock() {
+                const now = new Date();
+                const options = {
+                  timeZone: 'America/Bogota',
+                  year: 'numeric', month: 'long', day: 'numeric',
+                  hour: '2-digit', minute: '2-digit', second: '2-digit'
+                };
+                document.getElementById('clock').textContent =
+                  now.toLocaleString('es-CO', options);
+              }
+              updateClock();
+              setInterval(updateClock, 1000);
+            </script>
+          </body>
+          </html>
+          HTML
+
+          systemctl restart httpd
+
+Outputs:
+  InstanceId:
+    Description: ID de la instancia EC2 creada
+    Value: !Ref ExamenEC2Instance
+
+  PublicIP:
+    Description: IP publica de la instancia EC2
+    Value: !GetAtt ExamenEC2Instance.PublicIp
+
+  PublicDNS:
+    Description: DNS publico de la instancia EC2
+    Value: !GetAtt ExamenEC2Instance.PublicDnsName
+
+  WebsiteURL:
+    Description: URL de la pagina web desplegada
+    Value: !Sub "http://${ExamenEC2Instance.PublicIp}"
+
+  SecurityGroupId:
+    Description: ID del Security Group creado
+    Value: !Ref ExamenSecurityGroup
