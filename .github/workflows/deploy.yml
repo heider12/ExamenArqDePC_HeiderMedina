@@ -1,0 +1,113 @@
+name: Deploy EC2 con CloudFormation
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: examen-arq-ec2-stack
+  TEMPLATE_FILE: template/ec2.yaml
+
+jobs:
+  validate:
+    name: Validar Template CloudFormation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validar template de CloudFormation
+        run: |
+          echo "Validando template: ${{ env.TEMPLATE_FILE }}"
+          aws cloudformation validate-template \
+            --template-body file://${{ env.TEMPLATE_FILE }}
+          echo "Template validado correctamente"
+
+  deploy:
+    name: Desplegar Infraestructura en AWS
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Desplegar stack de CloudFormation
+        run: |
+          echo "Desplegando stack: ${{ env.STACK_NAME }}"
+
+          aws cloudformation deploy \
+            --template-file ${{ env.TEMPLATE_FILE }} \
+            --stack-name ${{ env.STACK_NAME }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --region ${{ env.AWS_REGION }}
+
+          echo "Stack desplegado correctamente"
+
+      - name: Esperar a que el stack esté listo
+        run: |
+          echo "Esperando a que el stack quede en estado CREATE_COMPLETE o UPDATE_COMPLETE..."
+
+          aws cloudformation wait stack-create-complete \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} || \
+          aws cloudformation wait stack-update-complete \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+          echo "Stack listo"
+
+      - name: Obtener outputs del stack
+        run: |
+          echo "Obteniendo información del stack desplegado..."
+
+          OUTPUTS=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query "Stacks[0].Outputs" \
+            --output table)
+
+          echo "$OUTPUTS"
+
+      - name: Obtener IP pública de la EC2
+        run: |
+          PUBLIC_IP=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query "Stacks[0].Outputs[?OutputKey=='PublicIP'].OutputValue" \
+            --output text)
+
+          echo "EC2 desplegada exitosamente"
+          echo "IP Publica: $PUBLIC_IP"
+          echo "Pagina web disponible en: http://$PUBLIC_IP"
+          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+
+      - name: Resumen del despliegue
+        run: |
+          echo "================================================"
+          echo "  DESPLIEGUE COMPLETADO EXITOSAMENTE"
+          echo "================================================"
+          echo "  Stack       : ${{ env.STACK_NAME }}"
+          echo "  Region      : ${{ env.AWS_REGION }}"
+          echo "  Pagina web  : http://${{ env.PUBLIC_IP }}"
+          echo "================================================"
